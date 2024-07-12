@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cryptocurrency Visualizer</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/axios/0.21.1/axios.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.7.0/chart.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #000;
+            color: #fff;
+            overflow: hidden;
+        }
+        #container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+        #webgl {
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+        #chartContainer {
+            position: absolute;
+            top: 60px;
+            left: 20px;
+            width: calc(100% - 40px);
+            height: calc(100% - 100px);
+            z-index: 2;
+        }
+        #menu {
+            position: absolute;
+            top: 10px;
+            left: 20px;
+            z-index: 3;
+        }
+        #loading, #error {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 3;
+            font-size: 24px;
+        }
+        #error {
+            color: red;
+            display: none;
+        }
+        select {
+            background-color: #333;
+            color: #fff;
+            padding: 5px;
+            border: none;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div id="webgl"></div>
+        <div id="menu">
+            <select id="chartType">
+                <option value="bar">Price Comparison (Bar)</option>
+                <option value="pie">Market Cap Distribution (Pie)</option>
+                <option value="polarArea">Volume Distribution (Polar Area)</option>
+            </select>
+        </div>
+        <div id="chartContainer">
+            <canvas id="cryptoChart"></canvas>
+        </div>
+        <div id="loading">Loading...</div>
+        <div id="error"></div>
+    </div>
+
+    <script>
+        const apiUrl = 'https://api.coingecko.com/api/v3';
+        let particles, particleSystem;
+        let scene, camera, renderer;
+        let cryptoData;
+        let chart;
+
+        async function getCryptoData() {
+            try {
+                const response = await axios.get(`${apiUrl}/coins/markets`, {
+                    params: {
+                        vs_currency: 'usd',
+                        order: 'market_cap_desc',
+                        per_page: 10,
+                        page: 1,
+                        sparkline: false
+                    }
+                });
+                return response.data;
+            } catch (error) {
+                console.error('Error fetching crypto data:', error);
+                throw error;
+            }
+        }
+
+        function createChart(type) {
+            if (chart) {
+                chart.destroy();
+            }
+
+            const ctx = document.getElementById('cryptoChart').getContext('2d');
+            const config = getChartConfig(type);
+
+            chart = new Chart(ctx, config);
+        }
+
+        function getChartConfig(type) {
+            const labels = cryptoData.map(coin => coin.symbol.toUpperCase());
+            const prices = cryptoData.map(coin => coin.current_price);
+            const marketCaps = cryptoData.map(coin => coin.market_cap);
+            const volumes = cryptoData.map(coin => coin.total_volume);
+
+            const configs = {
+                bar: {
+                    type: 'bar',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: 'Price (USD)',
+                            data: prices,
+                            backgroundColor: 'rgba(75, 192, 192, 0.6)'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            title: {
+                                display: true,
+                                text: 'Cryptocurrency Prices',
+                                color: '#fff'
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                title: {
+                                    display: true,
+                                    text: 'Price (USD)',
+                                    color: '#fff'
+                                },
+                                ticks: { color: '#fff' }
+                            },
+                            x: {
+                                title: {
+                                    display: true,
+                                    text: 'Cryptocurrency',
+                                    color: '#fff'
+                                },
+                                ticks: { color: '#fff' }
+                            }
+                        }
+                    }
+                },
+                line: {
+                    type: 'line',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: 'Price (USD)',
+                            data: prices,
+                            borderColor: 'rgba(75, 192, 192, 1)',
+                            tension: 0.1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            title: {
+                                display: true,
+                                text: 'Cryptocurrency Price Trends',
+                                color: '#fff'
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                title: {
+                                    display: true,
+                                    text: 'Price (USD)',
+                                    color: '#fff'
+                                },
+                                ticks: { color: '#fff' }
+                            },
+                            x: {
+                                title: {
+                                    display: true,
+                                    text: 'Cryptocurrency',
+                                    color: '#fff'
+                                },
+                                ticks: { color: '#fff' }
+                            }
+                        }
+                    }
+                },
+                radar: {
+                    type: 'radar',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: 'Price (USD)',
+                            data: prices,
+                            backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                            borderColor: 'rgba(75, 192, 192, 1)',
+                        }, {
+                            label: 'Market Cap (USD)',
+                            data: marketCaps,
+                            backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                            borderColor: 'rgba(255, 99, 132, 1)',
+                        }, {
+                            label: 'Volume (USD)',
+                            data: volumes,
+                            backgroundColor: 'rgba(255, 206, 86, 0.2)',
+                            borderColor: 'rgba(255, 206, 86, 1)',
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            title: {
+                                display: true,
+                                text: 'Multi-metric Comparison',
+                                color: '#fff'
+                            },
+                            legend: {
+                                labels: { color: '#fff' }
+                            }
+                        },
+                        scales: {
+                            r: {
+                                ticks: { color: '#fff' },
+                                pointLabels: { color: '#fff' }
+                            }
+                        }
+                    }
+                },
+                pie: {
+                    type: 'pie',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            data: marketCaps,
+                            backgroundColor: [
+                                'rgba(255, 99, 132, 0.8)',
+                                'rgba(54, 162, 235, 0.8)',
+                                'rgba(255, 206, 86, 0.8)',
+                                'rgba(75, 192, 192, 0.8)',
+                                'rgba(153, 102, 255, 0.8)',
+                                'rgba(255, 159, 64, 0.8)',
+                                'rgba(199, 199, 199, 0.8)',
+                                'rgba(83, 102, 255, 0.8)',
+                                'rgba(40, 159, 64, 0.8)',
+                                'rgba(210, 199, 199, 0.8)'
+                            ]
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            title: {
+                                display: true,
+                                text: 'Market Cap Distribution',
+                                color: '#fff'
+                            },
+                            legend: {
+                                position: 'right',
+                                labels: { color: '#fff' }
+                            }
+                        }
+                    }
+                },
+                polarArea: {
+                    type: 'polarArea',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            data: volumes,
+                            backgroundColor: [
+                                'rgba(255, 99, 132, 0.8)',
+                                'rgba(54, 162, 235, 0.8)',
+                                'rgba(255, 206, 86, 0.8)',
+                                'rgba(75, 192, 192, 0.8)',
+                                'rgba(153, 102, 255, 0.8)',
+                                'rgba(255, 159, 64, 0.8)',
+                                'rgba(199, 199, 199, 0.8)',
+                                'rgba(83, 102, 255, 0.8)',
+                                'rgba(40, 159, 64, 0.8)',
+                                'rgba(210, 199, 199, 0.8)'
+                            ]
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            title: {
+                                display: true,
+                                text: 'Trading Volume Distribution',
+                                color: '#fff'
+                            },
+                            legend: {
+                                position: 'right',
+                                labels: { color: '#fff' }
+                            }
+                        }
+                    }
+                }
+            };
+
+            return configs[type];
+        }
+
+        function initThreeJS() {
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.getElementById('webgl').appendChild(renderer.domElement);
+
+            camera.position.z = 30;
+
+            particles = new THREE.BufferGeometry();
+            const particleCount = 5000;
+            const positions = new Float32Array(particleCount * 3);
+
+            for (let i = 0; i < particleCount * 3; i += 3) {
+                positions[i] = (Math.random() - 0.5) * 100;
+                positions[i + 1] = (Math.random() - 0.5) * 100;
+                positions[i + 2] = (Math.random() - 0.5) * 100;
+            }
+
+            particles.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+            const material = new THREE.PointsMaterial({
+                color: 0x00ffff,
+                size: 0.1,
+                transparent: true
+            });
+
+            particleSystem = new THREE.Points(particles, material);
+            scene.add(particleSystem);
+
+            animate();
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            particleSystem.rotation.x += 0.001;
+            particleSystem.rotation.y += 0.002;
+
+            renderer.render(scene, camera);
+        }
+
+        function showError(message) {
+            const errorDiv = document.getElementById('error');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+        }
+
+        async function init() {
+            const loadingDiv = document.getElementById('loading');
+            const errorDiv = document.getElementById('error');
+            
+            try {
+                initThreeJS();
+                cryptoData = await getCryptoData();
+                loadingDiv.style.display = 'none';
+                errorDiv.style.display = 'none';
+                createChart('bar');
+            } catch (error) {
+                loadingDiv.style.display = 'none';
+                showError('Failed to fetch crypto data. Please try again later.');
+            }
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            if (chart) {
+                chart.resize();
+            }
+        });
+
+        document.getElementById('chartType').addEventListener('change', (event) => {
+            createChart(event.target.value);
+        });
+
+        init();
+    </script>
+</body>
+</html>
